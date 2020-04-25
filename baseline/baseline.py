@@ -109,7 +109,7 @@ if __name__ == '__main__':
     x_train_origin = train_df.loc[:, x_list].copy().values
     y_train_origin = train_df[y_type].copy().values
 
-    x_test = test_df.iloc[:, x_list].copy().values
+    x_test = test_df.loc[:, x_list].copy().values
     y_test = test_df[y_type].copy().values
 
     x_train, x_valid, y_train, y_valid = train_test_split(x_train_origin, y_train_origin, test_size=TEST_SIZE)
