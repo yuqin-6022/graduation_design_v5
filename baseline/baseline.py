@@ -78,6 +78,9 @@ if __name__ == '__main__':
     # y_type = 'overload_loc'
 
     snr_list = list(range(1, 11))  # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    # snr_list = [1, 3, 5, 6, 8, 10]
+    # snr_list = [1, 5, 6, 10]
+    # snr_list = [2, 4, 7, 9]
     # snr_list = list(range(1, 6))  # [1, 2, 3, 4, 5]
     # snr_list = list(range(6, 11))  # [6, 7, 8, 9, 10]
     # snr_list = list(range(1, 6, 2))  # [1, 3, 5]

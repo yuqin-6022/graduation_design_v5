@@ -80,11 +80,9 @@ class MyHyperModel(HyperModel):
         dloc_gate_out = tf.keras.layers.Softmax(name='gate_weight_for_dloc')(dloc_gate_dense)
         ed_gate_dense = tf.keras.layers.Dense(units=experts_num, name='ed_dense')(inputs)
         ed_gate_out = tf.keras.layers.Softmax(name='gate_weight_for_ed')(ed_gate_dense)
-        overload_gate_dense = tf.keras.layers.Dense(units=experts_num, name='overload_dense')(inputs)
-        overload_gate_out = tf.keras.layers.Softmax(name='gate_weight_for_overload')(overload_gate_dense)
-        gates_out = [dloc_gate_out, ed_gate_out, overload_gate_out]
+        gates_out = [dloc_gate_out, ed_gate_out]
         gates_out = tf.concat(gates_out, 1)
-        gates_out = tf.reshape(gates_out, (-1, 3, experts_num))
+        gates_out = tf.reshape(gates_out, (-1, 2, experts_num))
 
         # experts------------------------------------------------------------------------------------------------------
         experts_out = []
@@ -124,31 +122,18 @@ class MyHyperModel(HyperModel):
                 rate=hp.Float('ed_dropout_rate%d' % i, min_value=0, max_value=0.5, step=0.05), name=('ed_tower_dense%d_dropout' % i))(ed_tower_out)  # dropout
         ed_tower_out = tf.keras.layers.Dense(units=10, name='ed_tower_output_dense')(ed_tower_out)
         ed_tower_out = tf.keras.layers.Softmax(name='ed_softmax')(ed_tower_out)
-        # overload_towers----------------------------------------------------------------------------------------------
-        overload_tower_out = tower_input[:, 2]
-        for i in range(hp.Int('ed_tower_fc', min_value=1, max_value=2, step=1)):
-            overload_tower_out = tf.keras.layers.Dense(units=hp.Int('units%d' % i, min_value=64, max_value=256, step=64),
-                                                       activation='relu', name=('overload_tower_dense%d' % i))(overload_tower_out)
-            overload_tower_out = tf.keras.layers.BatchNormalization(name=('overload_tower_dense%d_bn' % i))(overload_tower_out)  # bn
-            overload_tower_out = tf.keras.layers.Dropout(
-                rate=hp.Float('overload_dropout_rate%d' % i, min_value=0, max_value=0.5, step=0.05), name=('overload_tower_dense%d_dropout' % i))(
-                overload_tower_out)  # dropout
-        overload_tower_out = tf.keras.layers.Dense(units=4, name='overload_tower_output_dense')(overload_tower_out)
-        overload_tower_out = tf.keras.layers.Softmax(name='overload_softmax')(overload_tower_out)
 
-        model = tf.keras.Model(inputs=inputs, outputs=[dloc_tower_out, ed_tower_out, overload_tower_out])
+        model = tf.keras.Model(inputs=inputs, outputs=[dloc_tower_out, ed_tower_out])
 
         model.compile(
             optimizer=tf.keras.optimizers.Adam(hp.Choice('learning_rate', [1e-2, 1e-3, 1e-4])),
             loss={
                 'dloc_softmax': 'sparse_categorical_crossentropy',
-                'ed_softmax': 'sparse_categorical_crossentropy',
-                'overload_softmax': 'sparse_categorical_crossentropy'
+                'ed_softmax': 'sparse_categorical_crossentropy'
             },
             loss_weights={
                 'dloc_softmax': hp.Int('dloc_loss_weight', min_value=1, max_value=10, step=1),
-                'ed_softmax': hp.Int('ed_loss_weight', min_value=1, max_value=10, step=1),
-                'overload_softmax': 1
+                'ed_softmax': 1
             },
             metrics=['accuracy']
         )
@@ -163,7 +148,7 @@ if __name__ == '__main__':
     print('Starting...')
     start_time = time.time()
 
-    model_type = 'bn_after'
+    model_type = 'two_bn_after'
 
     snr_list = list(range(1, 11))  # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     # snr_list = [1, 3, 5, 6, 8, 10]
@@ -218,10 +203,10 @@ if __name__ == '__main__':
     x_list = ['Sn%d' % i for i in snr_list]
     x_list.append('Tt')
     x_train_origin = train_df.loc[:, x_list].copy().values
-    y_train_origin = train_df[['dloc', 'ED', 'overload_loc']].copy().values
+    y_train_origin = train_df[['dloc', 'ED']].copy().values
 
     x_test = test_df.loc[:, x_list].copy().values
-    y_test = test_df[['dloc', 'ED', 'overload_loc']].copy().values
+    y_test = test_df[['dloc', 'ED']].copy().values
 
     x_train, x_valid, y_train, y_valid = train_test_split(x_train_origin, y_train_origin, test_size=TEST_SIZE)
 
@@ -232,10 +217,6 @@ if __name__ == '__main__':
     y_ED_train = y_train[:, 1]
     y_ED_valid = y_valid[:, 1]
     y_ED_test = y_test[:, 1]
-
-    y_overload_train = y_train[:, 2]
-    y_overload_valid = y_valid[:, 2]
-    y_overload_test = y_test[:, 2]
 
     # 标准化处理-------------------------------------------------------------------------------------------------------
     scaler = StandardScaler()
@@ -263,13 +244,13 @@ if __name__ == '__main__':
     # keras-tuner部分设置----------------------------------------------------------------------------------------------
     # CALLBACKS = [tf.keras.callbacks.EarlyStopping(patience=3)]
     CALLBACKS = [
-        MultiMetrics(valid_data=(x_valid, [y_dloc_valid, y_ED_valid, y_overload_valid]))
+        MultiMetrics(valid_data=(x_valid, [y_dloc_valid, y_ED_valid]))
         # tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', patience=10, factor=0.5, mode='auto')
         # tf.keras.callbacks.ReduceLROnPlateau(monitor='val_f1', patience=10, factor=0.5, mode='max')
     ]
     best_f1_model_path = os.path.join(BEST_F1_MODEL_DIR, '%s.hdf5' % model_type)
     FIT_CALLBACKS = [
-        MultiMetrics(valid_data=(x_valid, [y_dloc_valid, y_ED_valid, y_overload_valid])),
+        MultiMetrics(valid_data=(x_valid, [y_dloc_valid, y_ED_valid])),
         # tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', patience=10, factor=0.5, mode='auto'),
         # tf.keras.callbacks.ReduceLROnPlateau(monitor='val_f1', patience=10, factor=0.5, mode='max'),
         tf.keras.callbacks.ModelCheckpoint(best_f1_model_path, monitor='val_f1_mean', verbose=2, save_best_only=True, mode='max')
@@ -284,8 +265,8 @@ if __name__ == '__main__':
     tuner_start_time = datetime.now()
     tuner_start = time.time()
     # 开始超参数搜索
-    tuner.search(x_train, [y_dloc_train, y_ED_train, y_overload_train], batch_size=BATCH_SIZE, epochs=EPOCHS,
-                 validation_data=(x_valid, [y_dloc_valid, y_ED_valid, y_overload_valid]), callbacks=CALLBACKS)
+    tuner.search(x_train, [y_dloc_train, y_ED_train], batch_size=BATCH_SIZE, epochs=EPOCHS,
+                 validation_data=(x_valid, [y_dloc_valid, y_ED_valid]), callbacks=CALLBACKS)
     # tuner.search(x_train, y_train, batch_size=TUNER_BATCH_SIZE, epochs=TUNER_EPOCHS, validation_data=(x_valid, y_valid))
     # 结束计时超参数搜索
     tuner_end_time = datetime.now()
@@ -297,26 +278,24 @@ if __name__ == '__main__':
     best_models = tuner.get_best_models()
     best_model = best_models[0]
 
-    history = best_model.fit(x_train, [y_dloc_train, y_ED_train, y_overload_train], batch_size=BATCH_SIZE, epochs=FIT_EPOCHS,
-                             validation_data=(x_valid, [y_dloc_valid, y_ED_valid, y_overload_valid]), callbacks=FIT_CALLBACKS, verbose=2)
-    print(best_model.evaluate(x_test, [y_dloc_test, y_ED_test, y_overload_test]))
+    history = best_model.fit(x_train, [y_dloc_train, y_ED_train], batch_size=BATCH_SIZE, epochs=FIT_EPOCHS,
+                             validation_data=(x_valid, [y_dloc_valid, y_ED_valid]), callbacks=FIT_CALLBACKS, verbose=2)
+    print(best_model.evaluate(x_test, [y_dloc_test, y_ED_test]))
 
     # 恢复到最佳权重
     model = tf.keras.models.load_model(best_f1_model_path)
-    print(model.evaluate(x_test, [y_dloc_test, y_ED_test, y_overload_test]))
+    print(model.evaluate(x_test, [y_dloc_test, y_ED_test]))
     y_pred = model.predict(x_test)
     y_dloc_pred = np.argmax(y_pred[0], axis=1)
     y_ed_pred = np.argmax(y_pred[1], axis=1)
-    y_overload_pred = np.argmax(y_pred[2], axis=1)
 
     pred_csv = 'multi_pred.csv'
     if not os.path.exists(pred_csv):
-        pred_df = test_df[['dloc', 'ED', 'overload_loc']].copy()
+        pred_df = test_df[['dloc', 'ED']].copy()
     else:
         pred_df = pd.read_csv(pred_csv)
     pred_df['%s_dloc' % model_type] = y_dloc_pred
     pred_df['%s_ED' % model_type] = y_ed_pred
-    pred_df['%s_overload' % model_type] = y_overload_pred
 
     pred_df.to_csv(pred_csv, index=False)
 
