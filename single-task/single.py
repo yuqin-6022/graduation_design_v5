@@ -123,7 +123,7 @@ if __name__ == '__main__':
     OBJECTIVE = kerastuner.Objective("val_f1", direction="max")
     # OBJECTIVE = 'val_accuracy'
     MAX_TRIALS = 25
-    EPOCHS = 10000
+    EPOCHS = 2500
     FIT_EPOCHS = 50000
     BATCH_SIZE = 1024
     CUR_PATH = os.getcwd()
